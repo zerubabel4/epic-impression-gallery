@@ -237,3 +237,6 @@ dialog.wide { width: min(760px, calc(100vw - 32px)); }
 select.plain { max-width: 230px; }
 .stack label.toggle { display: grid; grid-template-columns: auto 1fr; font-size: 15px; color: var(--ink); }
 .stack .toggle b { font-weight: 600; }
+
+/* The page wrapper must not interfere with the workspace layout, or the photo grid cannot scroll. */
+#app { display: contents; }

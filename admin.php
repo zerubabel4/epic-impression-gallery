@@ -41,7 +41,7 @@ function page_top($title, $class = '') { global $B; ?>
 <!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="robots" content="noindex"><title><?= e($title) ?></title>
 <link rel="preconnect" href="https://fonts.bunny.net"><link rel="stylesheet" href="<?= e(FONT_LINK) ?>">
-<link rel="stylesheet" href="<?= $B ?>/admin.css?v=5"></head><body class="admin <?= e($class) ?>"><div id="app">
+<link rel="stylesheet" href="<?= $B ?>/admin.css?v=6"></head><body class="admin <?= e($class) ?>"><div id="app">
 <?php }
 function page_end() { global $B; echo '</div><script src="' . $B . '/admin.js?v=6"></script></body></html>'; }
 function sel($name, $opts, $cur, $attr = '') {
