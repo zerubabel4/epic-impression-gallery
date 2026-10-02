@@ -40,6 +40,32 @@ function fmtTime(s) {
   return 'about ' + (s / 3600).toFixed(1) + ' h left';
 }
 
+// Capture date from a JPEG's camera data (EXIF DateTimeOriginal), as "YYYY-MM-DD HH:MM:SS".
+async function takenDate(file) {
+  try {
+    const v = new DataView(await file.slice(0, 262144).arrayBuffer());
+    if (v.getUint16(0) !== 0xFFD8) return '';
+    let o = 2;
+    while (o + 4 < v.byteLength) {
+      const marker = v.getUint16(o), len = v.getUint16(o + 2);
+      if (marker === 0xFFE1 && v.getUint32(o + 4) === 0x45786966) { // "Exif"
+        const t = o + 10, le = v.getUint16(t) === 0x4949;
+        const u16 = p => v.getUint16(p, le), u32 = p => v.getUint32(p, le);
+        const find = (ifd, tag) => { const n = u16(ifd); for (let i = 0; i < n; i++) { const e = ifd + 2 + i * 12; if (u16(e) === tag) return e; } return 0; };
+        const ptr = find(t + u32(t + 4), 0x8769); if (!ptr) return '';
+        const e = find(t + u32(ptr + 8), 0x9003); if (!e) return '';
+        let str = ''; const at = t + u32(e + 8);
+        for (let i = 0; i < 19; i++) str += String.fromCharCode(v.getUint8(at + i));
+        const m = str.match(/^(\d{4}):(\d\d):(\d\d) (\d\d:\d\d:\d\d)$/);
+        return m ? `${m[1]}-${m[2]}-${m[3]} ${m[4]}` : '';
+      }
+      if ((marker & 0xFF00) !== 0xFF00) return '';
+      o += 2 + len;
+    }
+  } catch (err) {}
+  return '';
+}
+
 async function uploadAll(files) {
   files = files.filter(f => /^image\/(jpeg|png|webp)$/.test(f.type));
   if (!files.length || uploading) return;
@@ -57,10 +83,11 @@ async function uploadAll(files) {
     const bmp = await createImageBitmap(f, {imageOrientation: 'from-image'});
     const [web, thumb] = [await shrink(bmp, 2048), await shrink(bmp, 600)];
     const dims = {width: bmp.width, height: bmp.height}; bmp.close();
+    const taken = await takenDate(f);
     const s = await api('sign', {name: f.name});
     await Promise.all([put(s.urls.orig, f, n => { sent.set(f, n); render(); }), put(s.urls.web, web), put(s.urls.thumb, thumb)]);
     await api('save', {set_id: G.set, filename: f.name, key_orig: s.keys.orig, key_web: s.keys.web, key_thumb: s.keys.thumb,
-      width: dims.width, height: dims.height, size: f.size, taken_at: f.lastModified, position: G.maxpos + index + 1});
+      width: dims.width, height: dims.height, size: f.size, taken_at: f.lastModified, taken, position: G.maxpos + index + 1});
   };
   const queue = files.map((f, i) => [f, i]);
   const worker = async () => {

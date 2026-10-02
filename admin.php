@@ -27,6 +27,11 @@ function icon($n) {
         'trash' => '<path d="M5 7h14M10 7V5h4v2M7 7l1 13h8l1-13"/>',
         'eye' => '<path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12z"/><circle cx="12" cy="12" r="2.5"/>',
         'folder' => '<path d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z"/>',
+        'link' => '<path d="M10 14a4 4 0 005.7 0l3-3a4 4 0 00-5.7-5.7l-1 1M14 10a4 4 0 00-5.7 0l-3 3a4 4 0 005.7 5.7l1-1"/>',
+        'copy' => '<rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 00-2-2H6a2 2 0 00-2 2v8a2 2 0 002 2h2"/>',
+        'move' => '<path d="M4 12h12M12 7l5 5-5 5M20 5v14"/>',
+        'wand' => '<path d="M5 19L16 8M14 6l4 4M18 3v3M16.5 4.5h3M8 4v2M7 5h2M19 14v2M18 15h2"/>',
+        'target' => '<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="2.5"/>',
         'desktop' => '<rect x="3" y="5" width="18" height="11" rx="1.5"/><path d="M8 20h8M12 16v4"/>',
         'phone' => '<rect x="7.5" y="3" width="9" height="18" rx="2"/><path d="M11 18h2"/>',
     ][$n];
@@ -36,7 +41,7 @@ function page_top($title, $class = '') { global $B; ?>
 <!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="robots" content="noindex"><title><?= e($title) ?></title>
 <link rel="preconnect" href="https://fonts.bunny.net"><link rel="stylesheet" href="<?= e(FONT_LINK) ?>">
-<link rel="stylesheet" href="<?= $B ?>/admin.css?v=3"></head><body class="admin <?= e($class) ?>">
+<link rel="stylesheet" href="<?= $B ?>/admin.css?v=4"></head><body class="admin <?= e($class) ?>">
 <?php }
 function page_end() { echo '</body></html>'; }
 function sel($name, $opts, $cur, $attr = '') {
@@ -107,6 +112,40 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         case 'save_favorite':
             q('UPDATE collections SET allow_favorite=? WHERE id=?', [isset($_POST['on']) ? 1 : 0, $cid]);
             redirect("admin.php?c=$cid&tab=settings&sub=favorite&saved=1");
+        case 'move_folder':
+            q('UPDATE collections SET folder_id=? WHERE id=?', [((int)$_POST['folder_id']) ?: null, $cid]);
+            redirect("admin.php?c=$cid");
+        case 'duplicate': // copies settings, sets and photos; the photo files themselves are shared, not copied
+            $src = q('SELECT * FROM collections WHERE id=?', [$cid])->fetch();
+            if (!$src) redirect('admin.php');
+            $keep = ['folder_id', 'event_date', 'password', 'hide_home', 'expires_at', 'cover_style', 'grid_style', 'grid_size', 'grid_gap', 'font', 'palette',
+                     'show_filenames', 'sort_mode', 'tags', 'allow_download', 'allow_favorite', 'focal_x', 'focal_y'];
+            $vals = ['Copy of ' . $src['name'], unique_slug('Copy of ' . $src['name'])];
+            foreach ($keep as $k) $vals[] = $src[$k];
+            q('INSERT INTO collections (name, slug, ' . implode(', ', $keep) . ') VALUES (?,?' . str_repeat(',?', count($keep)) . ')', $vals);
+            $new = (int)db()->lastInsertId();
+            foreach (q('SELECT * FROM sets WHERE collection_id=? ORDER BY position, id', [$cid])->fetchAll() as $set) {
+                q('INSERT INTO sets (collection_id, name, position) VALUES (?,?,?)', [$new, $set['name'], $set['position']]);
+                $sid = (int)db()->lastInsertId();
+                foreach (q('SELECT * FROM photos WHERE set_id=?', [$set['id']])->fetchAll() as $ph) {
+                    q('INSERT INTO photos (collection_id,set_id,filename,key_orig,key_web,key_thumb,width,height,size,taken_at,position) VALUES (?,?,?,?,?,?,?,?,?,?,?)',
+                      [$new, $sid, $ph['filename'], $ph['key_orig'], $ph['key_web'], $ph['key_thumb'], $ph['width'], $ph['height'], $ph['size'], $ph['taken_at'], $ph['position']]);
+                    if ($ph['id'] == $src['cover_photo_id']) q('UPDATE collections SET cover_photo_id=? WHERE id=?', [db()->lastInsertId(), $new]);
+                }
+            }
+            redirect("admin.php?c=$new");
+        case 'save_preset':
+            $src = q('SELECT cover_style, font, palette, grid_style, grid_size, grid_gap FROM collections WHERE id=?', [$cid])->fetch();
+            if ($src && trim($_POST['name']) !== '') q('INSERT INTO presets (name, data) VALUES (?,?)', [substr(trim($_POST['name']), 0, 120), json_encode($src)]);
+            redirect("admin.php?c=$cid&tab=design");
+        case 'apply_preset':
+            $d = json_decode((string)q('SELECT data FROM presets WHERE id=?', [(int)$_POST['pid']])->fetchColumn(), true);
+            if ($d) q('UPDATE collections SET cover_style=?, font=?, palette=?, grid_style=?, grid_size=?, grid_gap=? WHERE id=?',
+                      [$d['cover_style'], $d['font'], $d['palette'], $d['grid_style'], $d['grid_size'], $d['grid_gap'], $cid]);
+            redirect("admin.php?c=$cid&tab=design");
+        case 'delete_preset':
+            q('DELETE FROM presets WHERE id=?', [(int)$_POST['pid']]);
+            redirect("admin.php?c=$cid&tab=design");
         case 'delete_collection':
             foreach (q('SELECT * FROM photos WHERE collection_id=?', [$cid]) as $p) delete_photo_files($p);
             q('DELETE FROM photos WHERE collection_id=?', [$cid]);
@@ -177,7 +216,8 @@ if (isset($_GET['c'])) {
     $cid = (int)$c['id'];
     $tab = in_array($_GET['tab'] ?? '', ['design', 'settings', 'activity']) ? $_GET['tab'] : 'photos';
     $sub = $_GET['sub'] ?? '';
-    $cover = $c['cover_photo_id'] ? q('SELECT * FROM photos WHERE id=?', [$c['cover_photo_id']])->fetch() : null;
+    $cover = cover_photo($c);
+    $presets = q('SELECT * FROM presets ORDER BY name')->fetchAll();
     $link = "$site/g/{$c['slug']}";
     $url = function ($tab, $sub = '') use ($B, $cid) { return "$B/admin.php?c=$cid" . ($tab !== 'photos' ? "&tab=$tab" : '') . ($sub ? "&sub=$sub" : ''); };
     page_top($c['name'], 'workspace'); ?>
@@ -187,6 +227,14 @@ if (isset($_GET['c'])) {
   <?= sel('status', ['published' => 'Published', 'draft' => 'Draft'], $c['status'], 'id="status" class="statussel ' . e($c['status']) . '" aria-label="Status"') ?>
   <form class="search" action="<?= $B ?>/admin.php"><input type="hidden" name="c" value="<?= $cid ?>"><?= icon('search') ?><input name="find" value="<?= e($_GET['find'] ?? '') ?>" placeholder="Search filenames"></form>
   <span class="grow"></span>
+  <details class="menu"><summary class="btn ghost">More</summary><div>
+    <button type="button" onclick="navigator.clipboard.writeText(<?= e(json_encode($link)) ?>);this.lastChild.textContent='Link copied'"><?= icon('link') ?><span>Get direct link</span></button>
+    <button type="button" onclick="document.getElementById('presetdlg').showModal()"><?= icon('gear') ?><span>Manage presets</span></button>
+    <button type="button" onclick="document.getElementById('movedlg').showModal()"><?= icon('move') ?><span>Move to</span></button>
+    <form method="post" onsubmit="return confirm('Duplicate this collection? The copy starts as a draft.')"><?= hidden('duplicate', $cid) ?><button><?= icon('copy') ?><span>Duplicate</span></button></form>
+    <form method="post" onsubmit="return confirm('Delete this collection and all its photos? This cannot be undone.')"><?= hidden('delete_collection', $cid) ?><button><?= icon('trash') ?><span>Delete collection</span></button></form>
+    <hr><form method="post" onsubmit="const n = prompt('Name for this style preset (saves cover, typography, color and grid)'); if (!n) return false; this.elements.name.value = n;"><?= hidden('save_preset', $cid) ?><input type="hidden" name="name"><button><?= icon('wand') ?><span>Create Style</span></button></form>
+  </div></details>
   <a class="btn ghost" href="<?= $B ?>/g/<?= e($c['slug']) ?>" target="_blank">Preview</a>
   <button class="btn primary" type="button" onclick="document.getElementById('share').showModal()">Share</button>
 </header>
@@ -197,9 +245,19 @@ if (isset($_GET['c'])) {
   <div class="row end"><button class="btn" type="button" onclick="this.closest('dialog').close()">Close</button>
   <button class="btn primary" type="button" onclick="navigator.clipboard.writeText(document.getElementById('sharelink').value);this.textContent='Copied'">Copy link</button></div></dialog>
 
+<dialog id="movedlg"><h2>Move to folder</h2><form method="post" class="stack"><?= hidden('move_folder', $cid) ?>
+  <label>Folder <?= sel('folder_id', $folderOpts, (int)$c['folder_id']) ?></label>
+  <div class="row end"><button class="btn" type="button" onclick="this.closest('dialog').close()">Cancel</button><button class="btn primary">Move</button></div></form></dialog>
+<dialog id="presetdlg"><h2>Style presets</h2>
+  <?php if (!$presets) echo '<p class="muted">No presets yet. Set up the design you like, then choose More &rarr; Create Style to save it for reuse.</p>'; ?>
+  <?php foreach ($presets as $pr) { ?><div class="presetrow"><strong><?= e($pr['name']) ?></strong><span class="grow"></span>
+    <form method="post"><?= hidden('apply_preset', $cid) ?><input type="hidden" name="pid" value="<?= $pr['id'] ?>"><button class="btn primary">Apply</button></form>
+    <form method="post" onsubmit="return confirm('Delete this preset?')"><?= hidden('delete_preset', $cid) ?><input type="hidden" name="pid" value="<?= $pr['id'] ?>"><button class="btn danger">Delete</button></form></div><?php } ?>
+  <div class="row end"><button class="btn" type="button" onclick="this.closest('dialog').close()">Close</button></div></dialog>
+
 <div class="cwrap">
 <aside class="cside">
-  <div class="coverthumb"><?php if ($cover) { ?><img src="<?= e(r2_url('GET', $cover['key_web'])) ?>" alt=""><?php } ?></div>
+  <div class="coverthumb"><?php if ($cover) { ?><img src="<?= e(r2_url('GET', $cover['key_web'])) ?>" alt="" style="object-position:<?= (int)$c['focal_x'] ?>% <?= (int)$c['focal_y'] ?>%"><?php } ?></div>
   <nav class="tabs">
     <a class="<?= $tab === 'photos' ? 'on' : '' ?>" href="<?= $url('photos') ?>" title="Photos"><?= icon('image') ?></a>
     <a class="<?= $tab === 'design' ? 'on' : '' ?>" href="<?= $url('design') ?>" title="Design"><?= icon('brush') ?></a>
@@ -227,7 +285,7 @@ if (isset($_GET['c'])) {
 <main class="cmain" id="drop">
   <div class="mainhead"><h1><?= $find !== '' ? 'Results for "' . e($find) . '"' : e($cur['name']) ?></h1><span class="grow"></span>
     <?php if ($find !== '') { ?><a class="link" href="<?= $url('photos') ?>">Clear search</a><?php } else { ?>
-    <?= sel('sort_mode', ['manual' => 'Manual order', 'name_asc' => 'Filename A-Z', 'name_desc' => 'Filename Z-A', 'date_asc' => 'Oldest first', 'date_desc' => 'Newest first'], $c['sort_mode'], 'id="sort" class="plain" aria-label="Photo order"') ?>
+    <?= sel('sort_mode', ['manual' => 'Sort by: Manual', 'up_desc' => 'Uploaded: New → Old', 'up_asc' => 'Uploaded: Old → New', 'date_desc' => 'Date Taken: New → Old', 'date_asc' => 'Date Taken: Old → New', 'name_asc' => 'Name: A-Z', 'name_desc' => 'Name: Z-A', 'random' => 'Random'], $c['sort_mode'], 'id="sort" class="plain" aria-label="Photo order"') ?>
     <label class="link addmedia"><?= icon('plus') ?>Add Media<input type="file" id="files" accept="image/jpeg,image/png,image/webp" multiple hidden></label><?php } ?>
   </div>
   <div class="selbar" id="selbar" hidden><strong id="selcount"></strong>
@@ -245,7 +303,7 @@ if (isset($_GET['c'])) {
 </main>
 <div id="up" class="up" hidden><strong id="uptitle"></strong><div class="bar"><i id="upbar"></i></div><span id="upsub"></span></div>
 <script>window.G = <?= json_encode(['api' => "$B/api.php", 'cid' => $cid, 'set' => (int)$cur['id'], 'csrf' => csrf(), 'maxpos' => $maxpos, 'setName' => $cur['name']]) ?>;</script>
-<script src="<?= $B ?>/admin.js?v=2"></script>
+<script src="<?= $B ?>/admin.js?v=4"></script>
 <?php
     // ===== Design =====
     } elseif ($tab === 'design') {
@@ -264,7 +322,8 @@ if (isset($_GET['c'])) {
 <main class="cmain design">
   <section class="pick">
   <?php if ($sub === 'cover') { ?>
-    <div class="mainhead"><h1>Cover</h1><span class="grow"></span><a class="link" href="<?= $url('photos') ?>"><?= icon('image') ?>Cover Photo</a></div>
+    <div class="mainhead"><h1>Cover</h1><span class="grow"></span><a class="link" href="<?= $url('photos') ?>"><?= icon('image') ?>Cover Photo</a>
+      <?php if ($cover) { ?><button type="button" class="link" onclick="document.getElementById('focaldlg').showModal()"><?= icon('target') ?>Focal</button><?php } ?></div>
     <div class="opts"><?php foreach (covers() as $k => $label) echo $opt('cover_style', $k, '<span class="mock m-' . $k . '"><i></i><b>TITLE</b></span>', $label); ?></div>
     <p class="muted">To change the cover photo, open Photos, select one photo and press "Set as cover".</p>
   <?php } elseif ($sub === 'typography') { ?>
@@ -282,6 +341,9 @@ if (isset($_GET['c'])) {
     <h3>Grid Spacing</h3><div class="opts"><?= $opt('grid_gap', 'small', '<span class="gi g-4"><i></i><i></i><i></i><i></i></span>', 'Regular') . $opt('grid_gap', 'large', '<span class="gi g-4 wide"><i></i><i></i><i></i><i></i></span>', 'Large') ?></div>
   <?php } ?>
   </section>
+  <?php if ($cover) { ?><dialog id="focaldlg" class="wide"><h2>Focal point</h2><p class="muted">Click the most important part of the photo. The cover keeps that spot in view on every screen size.</p>
+    <div class="focal" id="focal"><img src="<?= e(r2_url('GET', $cover['key_web'])) ?>" alt=""><i id="focaldot" style="left:<?= (int)$c['focal_x'] ?>%;top:<?= (int)$c['focal_y'] ?>%"></i></div>
+    <div class="row end"><button class="btn" type="button" onclick="this.closest('dialog').close()">Cancel</button><button class="btn primary" type="button" id="focalsave">Save</button></div></dialog><?php } ?>
   <section class="preview"><div class="frame" id="frame"><iframe id="pv" src="<?= $B ?>/g.php?s=<?= e($c['slug']) ?>&embed=1" title="Gallery preview"></iframe></div>
     <div class="devices"><button type="button" class="on" data-w="desktop" title="Desktop"><?= icon('desktop') ?></button><button type="button" data-w="phone" title="Phone"><?= icon('phone') ?></button></div></section>
 </main>
@@ -294,6 +356,20 @@ document.querySelectorAll('.opt').forEach(b => b.onclick = async () => {
   document.querySelectorAll('.opt[data-field="' + b.dataset.field + '"]').forEach(o => o.classList.toggle('on', o === b));
   document.getElementById('pv').contentWindow.location.reload();
 });
+const focal = document.getElementById('focal');
+if (focal) {
+  let fx = <?= (int)$c['focal_x'] ?>, fy = <?= (int)$c['focal_y'] ?>;
+  focal.onclick = ev => {
+    const r = focal.getBoundingClientRect();
+    fx = Math.round((ev.clientX - r.left) / r.width * 100); fy = Math.round((ev.clientY - r.top) / r.height * 100);
+    Object.assign(document.getElementById('focaldot').style, {left: fx + '%', top: fy + '%'});
+  };
+  document.getElementById('focalsave').onclick = async () => {
+    const fd = new FormData(); fd.append('csrf', CSRF); fd.append('cid', CID); fd.append('x', fx); fd.append('y', fy);
+    await fetch(API + '?a=focal', {method: 'POST', body: fd});
+    document.getElementById('focaldlg').close(); document.getElementById('pv').contentWindow.location.reload();
+  };
+}
 document.querySelectorAll('.devices button').forEach(b => b.onclick = () => {
   document.querySelectorAll('.devices button').forEach(o => o.classList.toggle('on', o === b));
   document.getElementById('frame').classList.toggle('phone', b.dataset.w === 'phone');
@@ -388,6 +464,7 @@ document.querySelectorAll('.devices button').forEach(b => b.onclick = () => {
 <?php } ?>
 </div>
 <script>
+document.addEventListener('click', ev => document.querySelectorAll('details.menu[open]').forEach(d => { if (!d.contains(ev.target)) d.open = false; }));
 document.getElementById('status').onchange = async ev => {
   const fd = new FormData(); fd.append('csrf', <?= json_encode(csrf()) ?>); fd.append('cid', <?= $cid ?>); fd.append('field', 'status'); fd.append('value', ev.target.value);
   await fetch(<?= json_encode("$B/api.php?a=set") ?>, {method: 'POST', body: fd}); location.reload();

@@ -29,7 +29,7 @@ function top($c, $vars) { global $B; ?>
 <!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="robots" content="noindex"><title><?= e($c['name']) ?></title>
 <link rel="preconnect" href="https://fonts.bunny.net"><link rel="stylesheet" href="<?= e(FONT_LINK) ?>">
-<link rel="stylesheet" href="<?= $B ?>/style.css?v=3"></head>
+<link rel="stylesheet" href="<?= $B ?>/style.css?v=4"></head>
 <body class="gallery" style="<?= e($vars) ?>">
 <?php }
 
@@ -58,7 +58,7 @@ $linked = isset($_GET['photo']) ? q('SELECT id, set_id FROM photos WHERE id=? AN
 $want = $linked ? $linked['set_id'] : (int)($_GET['set'] ?? 0);
 foreach ($sets as $s) if ($s['id'] == $want) $cur = $s;
 $photos = $cur ? q('SELECT * FROM photos WHERE set_id=? ORDER BY ' . photo_order($c['sort_mode']), [$cur['id']])->fetchAll() : [];
-$cover = $c['cover_photo_id'] ? q('SELECT * FROM photos WHERE id=?', [$c['cover_photo_id']])->fetch() : null;
+$cover = cover_photo($c);
 $rowH = $c['grid_size'] === 'large' ? 380 : 260;
 $date = $c['event_date'] ? date('F jS, Y', strtotime($c['event_date'])) : '';
 $style = isset(covers()[$c['cover_style']]) ? $c['cover_style'] : 'center';
@@ -73,7 +73,7 @@ if (is_admin() && !$embedded) { ?>
 <?php }
 
 if ($cover && $style !== 'none' && !$linked) { ?>
-<header class="cover c-<?= e($style) ?>"><div class="cimg"><img src="<?= e(r2_url('GET', $cover['key_web'])) ?>" alt=""></div>
+<header class="cover c-<?= e($style) ?>"><div class="cimg"><img src="<?= e(r2_url('GET', $cover['key_web'])) ?>" alt="" style="object-position:<?= (int)($c['focal_x'] ?? 50) ?>% <?= (int)($c['focal_y'] ?? 50) ?>%"></div>
 <div class="ctitle"><h1><?= e($c['name']) ?></h1><?php if ($date) echo '<p>' . e($date) . '</p>'; ?><a href="#photos">View gallery</a></div>
 <p class="studio"><?= e($CFG['site_name']) ?></p></header>
 <?php } ?>
@@ -168,9 +168,21 @@ if ($('favfilter')) $('favfilter').onclick = () => {
 };
 
 // ---------- Full-screen viewer ----------
-function show(i) {
+// Slide the old photo out and the new one in, in the direction of travel.
+function slide(dir) {
+  if (!dir || !img.getAttribute('src') || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const r = img.getBoundingClientRect(), ghost = img.cloneNode();
+  ghost.removeAttribute('id');
+  Object.assign(ghost.style, {position: 'fixed', left: r.left + 'px', top: r.top + 'px', width: r.width + 'px', height: r.height + 'px', maxWidth: 'none', maxHeight: 'none', pointerEvents: 'none', zIndex: 11});
+  document.body.append(ghost);
+  const opt = {duration: 450, easing: 'cubic-bezier(.4, 0, .2, 1)'};
+  ghost.animate([{transform: 'none', opacity: 1}, {transform: `translateX(${-dir * 60}vw)`, opacity: 0}], opt).onfinish = () => ghost.remove();
+  img.animate([{transform: `translateX(${dir * 60}vw)`, opacity: 0}, {transform: 'none', opacity: 1}], opt);
+}
+function show(i, dir = 0) {
   at = (i + tiles.length) % tiles.length;
   const t = tiles[at], id = +t.dataset.id;
+  if (!vw.hidden) slide(dir);
   img.src = t.dataset.web; $('vcap').textContent = CFG.names ? t.dataset.name : '';
   if ($('vdl')) $('vdl').href = CFG.api + '?a=download&cid=' + CFG.cid + '&id=' + id;
   vw.hidden = false; document.body.style.overflow = 'hidden';
@@ -182,7 +194,7 @@ function closeViewer() { stopShow(); vw.hidden = true; img.src = ''; $('cpanel')
 function startShow() {
   vw.classList.add('show'); $('cpanel').hidden = true;
   if (vw.requestFullscreen) vw.requestFullscreen().catch(() => {});
-  timer = setInterval(() => show(at + 1), 4000);
+  timer = setInterval(() => show(at + 1, 1), 4000);
 }
 function stopShow() {
   if (!timer) return;
@@ -194,8 +206,8 @@ tiles.forEach((t, i) => {
   t.onkeydown = ev => { if (ev.key === 'Enter') show(i); };
 });
 $('vback').onclick = closeViewer;
-$('vprev').onclick = () => show(at - 1);
-$('vnext').onclick = () => show(at + 1);
+$('vprev').onclick = () => show(at - 1, -1);
+$('vnext').onclick = () => show(at + 1, 1);
 $('vplay').onclick = ev => { ev.stopPropagation(); startShow(); };
 if ($('playall')) $('playall').onclick = () => { show(0); startShow(); };
 if ($('vfav')) $('vfav').onclick = () => toggleFav(+tiles[at].dataset.id);
@@ -208,12 +220,12 @@ document.addEventListener('fullscreenchange', () => { if (!document.fullscreenEl
 document.onkeydown = ev => {
   if (vw.hidden || ev.target.matches('textarea, input')) return;
   if (ev.key === 'Escape') timer ? stopShow() : closeViewer();
-  if (ev.key === 'ArrowLeft') show(at - 1);
-  if (ev.key === 'ArrowRight') show(at + 1);
+  if (ev.key === 'ArrowLeft') show(at - 1, -1);
+  if (ev.key === 'ArrowRight') show(at + 1, 1);
 };
 let sx = null;
 vw.ontouchstart = ev => sx = ev.touches[0].clientX;
-vw.ontouchend = ev => { if (sx === null) return; const d = ev.changedTouches[0].clientX - sx; if (Math.abs(d) > 50) show(at + (d < 0 ? 1 : -1)); sx = null; };
+vw.ontouchend = ev => { if (sx === null) return; const d = ev.changedTouches[0].clientX - sx; if (Math.abs(d) > 50) show(at + (d < 0 ? 1 : -1), d < 0 ? 1 : -1); sx = null; };
 
 // ---------- Private comments ----------
 function drawComments(list) {

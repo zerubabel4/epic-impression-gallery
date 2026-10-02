@@ -69,8 +69,16 @@ function r2_delete($key) {
     curl_exec($ch); curl_close($ch);
 }
 function delete_photo_files($p) {
-    r2_delete($p['key_orig']); r2_delete($p['key_web']); r2_delete($p['key_thumb']);
+    // A duplicated collection shares its files with the original, so only remove files nobody else uses.
+    if (!q('SELECT COUNT(*) FROM photos WHERE key_orig=? AND id<>?', [$p['key_orig'], $p['id']])->fetchColumn()) {
+        r2_delete($p['key_orig']); r2_delete($p['key_web']); r2_delete($p['key_thumb']);
+    }
     foreach (['favorites', 'comments', 'downloads'] as $t) q("DELETE FROM $t WHERE photo_id=?", [$p['id']]);
+}
+// The chosen cover photo, or the first photo when none is chosen (or the chosen one was deleted).
+function cover_photo($c) {
+    $p = $c['cover_photo_id'] ? q('SELECT * FROM photos WHERE id=? AND collection_id=?', [$c['cover_photo_id'], $c['id']])->fetch() : null;
+    return $p ?: (q('SELECT * FROM photos WHERE collection_id=? ORDER BY set_id, position, id LIMIT 1', [$c['id']])->fetch() ?: null);
 }
 
 // A visitor may see a collection if it is published, not expired, and they passed the password (or are the owner).
@@ -123,7 +131,7 @@ function palette_vars($name) {
 }
 function photo_order($mode) {
     return ['manual' => 'position, id', 'name_asc' => 'filename', 'name_desc' => 'filename DESC',
-            'date_asc' => 'taken_at, id', 'date_desc' => 'taken_at DESC, id DESC'][$mode] ?? 'position, id';
+            'date_asc' => 'taken_at, id', 'date_desc' => 'taken_at DESC, id DESC', 'up_desc' => 'id DESC', 'up_asc' => 'id'][$mode] ?? 'position, id';
 }
 
 // ---------- Database upgrades: applied automatically, once, after an update ----------
@@ -147,6 +155,9 @@ function migrate() {
               "CREATE TABLE IF NOT EXISTS downloads (id INT AUTO_INCREMENT PRIMARY KEY, collection_id INT NOT NULL, photo_id INT NOT NULL, client VARCHAR(80) NOT NULL, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)",
               "ALTER TABLE collections ADD allow_download TINYINT NOT NULL DEFAULT 1",
               "ALTER TABLE collections ADD allow_favorite TINYINT NOT NULL DEFAULT 1"],
+        4 => ["ALTER TABLE collections ADD focal_x INT NOT NULL DEFAULT 50",
+              "ALTER TABLE collections ADD focal_y INT NOT NULL DEFAULT 50",
+              "CREATE TABLE IF NOT EXISTS presets (id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(120) NOT NULL, data TEXT NOT NULL)"],
     ];
     $sqlite = db()->getAttribute(PDO::ATTR_DRIVER_NAME) === 'sqlite'; // local testing only
     foreach ($steps as $n => $sqls) {

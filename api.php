@@ -26,7 +26,8 @@ switch ($_GET['a'] ?? '') {
         foreach (['key_orig', 'key_web', 'key_thumb'] as $k)
             if (strpos($_POST[$k] ?? '', "c$cid/") !== 0) exit('{"error":"Bad file key"}');
         $pos = !empty($_POST['position']) ? (int)$_POST['position'] : (int)q('SELECT COALESCE(MAX(position),0)+1 FROM photos WHERE set_id=?', [$set])->fetchColumn();
-        $taken = !empty($_POST['taken_at']) ? date('Y-m-d H:i:s', (int)($_POST['taken_at'] / 1000)) : null;
+        $taken = preg_match('/^\d{4}-\d\d-\d\d \d\d:\d\d:\d\d$/', $_POST['taken'] ?? '') ? $_POST['taken'] // from the camera data
+            : (!empty($_POST['taken_at']) ? date('Y-m-d H:i:s', (int)($_POST['taken_at'] / 1000)) : null);
         q('INSERT INTO photos (collection_id,set_id,filename,key_orig,key_web,key_thumb,width,height,size,taken_at,position)
            VALUES (?,?,?,?,?,?,?,?,?,?,?)',
           [$cid, $set, substr($_POST['filename'], 0, 255), $_POST['key_orig'], $_POST['key_web'], $_POST['key_thumb'],
@@ -59,14 +60,24 @@ switch ($_GET['a'] ?? '') {
             q('UPDATE collections SET cover_photo_id=? WHERE id=?', [$ids[0], $cid]);
         break;
 
+    case 'focal': // where the cover photo is centred, in percent
+        q('UPDATE collections SET focal_x=?, focal_y=? WHERE id=?', [max(0, min(100, (int)$_POST['x'])), max(0, min(100, (int)$_POST['y'])), $cid]);
+        break;
+
     case 'set': // one design or status option, chosen from a fixed list
         $allowed = [
             'cover_style' => array_keys(covers()), 'font' => array_keys(typefaces()), 'palette' => array_keys(palettes()),
             'grid_style' => ['masonry', 'rows'], 'grid_size' => ['medium', 'large'], 'grid_gap' => ['small', 'large'],
-            'status' => ['draft', 'published'], 'sort_mode' => ['manual', 'name_asc', 'name_desc', 'date_asc', 'date_desc'],
+            'status' => ['draft', 'published'], 'sort_mode' => ['manual', 'name_asc', 'name_desc', 'date_asc', 'date_desc', 'up_desc', 'up_asc', 'random'],
         ];
         $field = $_POST['field'] ?? ''; $value = $_POST['value'] ?? '';
         if (!isset($allowed[$field]) || !in_array($value, $allowed[$field], true)) { http_response_code(400); $out = ['error' => 'Invalid option']; break; }
+        if ($field === 'sort_mode' && $value === 'random') { // shuffle once, then keep that order
+            $all = q('SELECT id FROM photos WHERE collection_id=?', [$cid])->fetchAll(PDO::FETCH_COLUMN);
+            shuffle($all);
+            foreach ($all as $i => $id) q('UPDATE photos SET position=? WHERE id=?', [$i + 1, $id]);
+            $value = 'manual';
+        }
         q("UPDATE collections SET $field=? WHERE id=?", [$value, $cid]);
         break;
 
