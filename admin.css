@@ -116,12 +116,26 @@ select.statussel.published { background: var(--accent-soft); color: #23705f; }
 .tile:hover input, .tile input:checked, .selecting .tile input { opacity: 1; }
 .tile:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); }
 .tile.iscover::after { content: "Cover"; position: absolute; bottom: 10px; left: 10px; font-size: 10px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; background: var(--ink); color: #fff; padding: 2px 8px; border-radius: 99px; }
-.up { position: fixed; right: 24px; bottom: 24px; width: 340px; max-width: calc(100vw - 32px); background: var(--ink); color: #fff; border-radius: 8px; padding: 16px 18px; box-shadow: 0 12px 40px rgba(0,0,0,.3); z-index: 5; }
-.up[hidden] { display: none; }
-.up strong { display: block; font-weight: 500; font-size: 14px; }
-.up .bar { height: 6px; background: rgba(255,255,255,.18); border-radius: 99px; margin: 10px 0 8px; overflow: hidden; }
-.up .bar i { display: block; height: 100%; width: 0; background: #5fc9b0; border-radius: 99px; transition: width .2s; }
-.up span { font-size: 12px; opacity: .8; font-variant-numeric: tabular-nums; }
+.up { position: fixed; right: 24px; bottom: 24px; width: 400px; max-width: calc(100vw - 32px); background: #fff; color: var(--ink); border-radius: 8px; box-shadow: 0 10px 40px rgba(0,0,0,.22); z-index: 50; overflow: hidden; }
+.up[hidden], .upbody[hidden] { display: none; }
+.uphead { display: flex; align-items: center; gap: 4px; padding: 14px 10px 12px 18px; }
+.uphead > div { flex: 1; min-width: 0; }
+.uphead strong { display: block; font-weight: 500; font-size: 15px; }
+.uphead span { font-size: 12px; color: var(--mute); font-variant-numeric: tabular-nums; }
+.uphead button { border: 0; background: none; font-size: 22px; line-height: 1; width: 34px; height: 34px; border-radius: 4px; cursor: pointer; color: var(--mute); }
+.uphead button:hover { background: var(--soft); color: var(--ink); }
+.up .bar { height: 3px; background: var(--line); }
+.up .bar i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .2s; }
+.uptabs { display: flex; gap: 6px; padding: 12px 14px 6px; flex-wrap: wrap; }
+.uptabs button { border: 0; background: var(--soft); border-radius: 99px; padding: 5px 12px; font-size: 13px; cursor: pointer; }
+.uptabs button.on { background: var(--accent-soft); color: #23705f; font-weight: 500; }
+.uptabs button.retry { margin-left: auto; background: none; color: var(--accent); font-weight: 500; }
+.up ul { list-style: none; margin: 0; padding: 4px 18px 12px; max-height: 260px; overflow-y: auto; }
+.up li { padding: 8px 0; border-bottom: 1px solid var(--line); display: grid; }
+.up li:last-child { border: 0; }
+.up li b { font-weight: 500; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.up li span, .up li.more { font-size: 12px; color: var(--mute); font-variant-numeric: tabular-nums; }
+.up li.done span { color: #23705f; } .up li.failed span { color: var(--danger); }
 
 /* Design tab */
 .cmain.design { display: grid; grid-template-columns: 440px 1fr; padding: 0; overflow: hidden; }

@@ -32,7 +32,8 @@ switch ($_GET['a'] ?? '') {
            VALUES (?,?,?,?,?,?,?,?,?,?,?)',
           [$cid, $set, substr($_POST['filename'], 0, 255), $_POST['key_orig'], $_POST['key_web'], $_POST['key_thumb'],
            (int)$_POST['width'], (int)$_POST['height'], (int)$_POST['size'], $taken, $pos]);
-        if (!$col['cover_photo_id']) q('UPDATE collections SET cover_photo_id=? WHERE id=? AND cover_photo_id IS NULL', [db()->lastInsertId(), $cid]);
+        $out['id'] = (int)db()->lastInsertId();
+        if (!$col['cover_photo_id']) q('UPDATE collections SET cover_photo_id=? WHERE id=? AND cover_photo_id IS NULL', [$out['id'], $cid]);
         break;
 
     case 'order': // manual arrangement: ids arrive in their new order

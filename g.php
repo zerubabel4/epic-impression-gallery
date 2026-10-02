@@ -11,7 +11,8 @@ if (!$c || (!is_admin() && ($c['status'] !== 'published' || $expired))) {
 }
 $cid = (int)$c['id'];
 $vars = palette_vars($c['palette'] ?? 'light') . ';' . type_vars($c['font']);
-$embedded = isset($_GET['embed']); // shown inside the admin design preview
+$embedded = isset($_GET['embed']);
+$preview = is_admin() && isset($_GET['preview']); // opened with the Preview button in the dashboard // shown inside the admin design preview
 
 function gi($n) {
     $p = [
@@ -67,7 +68,7 @@ $favs = $name !== '' ? array_map('intval', q('SELECT photo_id FROM favorites WHE
 $canFav = $c['allow_favorite'] || is_admin(); $canDl = $c['allow_download'] || is_admin();
 top($c, $vars);
 
-if (is_admin() && !$embedded) { ?>
+if ($preview && !$embedded) { ?>
 <p class="ownerbar">Viewing collection as <b>Owner</b><?= $c['status'] !== 'published' || $expired ? ' (' . ($expired ? 'expired' : 'draft') . ', hidden from clients)' : '' ?>.
 <a href="<?= $B ?>/admin.php?c=<?= $cid ?>">Edit collection</a><a href="<?= $B ?>/admin.php">Dashboard</a></p>
 <?php }
@@ -80,7 +81,7 @@ if ($cover && $style !== 'none' && !$linked) { ?>
 
 <div class="gbar" id="photos"><div class="gname"><strong><?= e($c['name']) ?></strong><span><?= e($CFG['site_name']) ?></span></div>
 <?php if (count($sets) > 1) { ?><nav class="sets"><?php foreach ($sets as $s) { ?>
-<a class="<?= $s['id'] == $cur['id'] ? 'on' : '' ?>" href="<?= $B ?>/g.php?s=<?= e($c['slug']) ?>&set=<?= $s['id'] ?>#photos"><?= e($s['name']) ?></a><?php } ?></nav><?php } ?>
+<a class="<?= $s['id'] == $cur['id'] ? 'on' : '' ?>" href="<?= $B ?>/g.php?s=<?= e($c['slug']) ?>&set=<?= $s['id'] ?><?= $preview ? '&preview=1' : '' ?>#photos"><?= e($s['name']) ?></a><?php } ?></nav><?php } ?>
 <span class="grow"></span>
 <div class="gtools"><?php if ($canFav) { ?><button type="button" id="favfilter" title="Show my favorites"><?= gi('heart') ?><i id="favcount"></i></button><?php } ?>
 <?php if ($photos) { ?><button type="button" id="playall" title="Slideshow"><?= gi('play') ?></button><?php } ?></div></div>

@@ -41,9 +41,9 @@ function page_top($title, $class = '') { global $B; ?>
 <!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="robots" content="noindex"><title><?= e($title) ?></title>
 <link rel="preconnect" href="https://fonts.bunny.net"><link rel="stylesheet" href="<?= e(FONT_LINK) ?>">
-<link rel="stylesheet" href="<?= $B ?>/admin.css?v=4"></head><body class="admin <?= e($class) ?>">
+<link rel="stylesheet" href="<?= $B ?>/admin.css?v=5"></head><body class="admin <?= e($class) ?>"><div id="app">
 <?php }
-function page_end() { echo '</body></html>'; }
+function page_end() { global $B; echo '</div><script src="' . $B . '/admin.js?v=5"></script></body></html>'; }
 function sel($name, $opts, $cur, $attr = '') {
     $h = "<select name=\"$name\" $attr>";
     foreach ($opts as $v => $label) $h .= '<option value="' . e($v) . '"' . ((string)$v === (string)$cur ? ' selected' : '') . '>' . e($label) . '</option>';
@@ -235,7 +235,7 @@ if (isset($_GET['c'])) {
     <form method="post" onsubmit="return confirm('Delete this collection and all its photos? This cannot be undone.')"><?= hidden('delete_collection', $cid) ?><button><?= icon('trash') ?><span>Delete collection</span></button></form>
     <hr><form method="post" onsubmit="const n = prompt('Name for this style preset (saves cover, typography, color and grid)'); if (!n) return false; this.elements.name.value = n;"><?= hidden('save_preset', $cid) ?><input type="hidden" name="name"><button><?= icon('wand') ?><span>Create Style</span></button></form>
   </div></details>
-  <a class="btn ghost" href="<?= $B ?>/g/<?= e($c['slug']) ?>" target="_blank">Preview</a>
+  <a class="btn ghost" href="<?= $B ?>/g/<?= e($c['slug']) ?>?preview=1" target="_blank">Preview</a>
   <button class="btn primary" type="button" onclick="document.getElementById('share').showModal()">Share</button>
 </header>
 <dialog id="share"><h2>Share this gallery</h2>
@@ -278,7 +278,7 @@ if (isset($_GET['c'])) {
         $setOpts = []; foreach ($sets as $s) $setOpts[$s['id']] = $s['name']; ?>
   <div class="sidehead"><span>Photos</span><button type="button" class="link" id="addset"><?= icon('plus') ?>Add Set</button></div>
   <ul class="sidelist"><?php foreach ($sets as $s) { $on = !$find && $s['id'] == $cur['id']; ?>
-    <li class="<?= $on ? 'on' : '' ?>"><a href="<?= $B ?>/admin.php?c=<?= $cid ?>&set=<?= $s['id'] ?>"><?= e($s['name']) ?> (<?= $s['n'] ?>)</a>
+    <li class="<?= $on ? 'on' : '' ?>"><a href="<?= $B ?>/admin.php?c=<?= $cid ?>&set=<?= $s['id'] ?>"><span><?= e($s['name']) ?> (<span data-count="<?= $s['id'] ?>"><?= $s['n'] ?></span>)</span></a>
     <?php if ($on) { ?><button type="button" class="mini" id="renset" title="Rename set"><?= icon('pencil') ?></button><?php if (count($sets) > 1) { ?><button type="button" class="mini" id="delset" title="Delete set"><?= icon('trash') ?></button><?php } } ?></li>
   <?php } ?></ul>
 </aside>
@@ -294,16 +294,15 @@ if (isset($_GET['c'])) {
     <button type="button" data-act="delete" class="danger">Delete</button><span class="grow"></span>
     <button type="button" id="selall">Select all</button><button type="button" id="selnone">Clear</button></div>
   <div id="grid" class="tiles"><?php foreach ($photos as $p) { ?>
-    <label class="tile<?= $p['id'] == $c['cover_photo_id'] ? ' iscover' : '' ?>" draggable="<?= $find === '' ? 'true' : 'false' ?>" data-id="<?= $p['id'] ?>" title="<?= e($p['filename']) ?>">
+    <label class="tile<?= $p['id'] == $c['cover_photo_id'] ? ' iscover' : '' ?>" draggable="<?= $find === '' ? 'true' : 'false' ?>" data-id="<?= $p['id'] ?>" data-pos="<?= (int)$p['position'] ?>" title="<?= e($p['filename']) ?>">
       <input type="checkbox" value="<?= $p['id'] ?>"><img loading="lazy" src="<?= e(r2_url('GET', $p['key_thumb'])) ?>" alt=""></label>
   <?php } ?></div>
   <?php if (!$photos) { ?><div class="emptystate"><?= icon('image') ?><p><?= $find !== '' ? 'No photos match that search.' : 'No photos in this set yet.' ?></p>
     <?php if ($find === '') echo '<p class="muted">Press Add Media, or drag photos from your computer onto this page.</p>'; ?></div><?php } ?>
   <form method="post" id="act" hidden><?= hidden('', $cid) ?><input name="sid" value="<?= $cur['id'] ?>"><input name="name"></form>
 </main>
-<div id="up" class="up" hidden><strong id="uptitle"></strong><div class="bar"><i id="upbar"></i></div><span id="upsub"></span></div>
-<script>window.G = <?= json_encode(['api' => "$B/api.php", 'cid' => $cid, 'set' => (int)$cur['id'], 'csrf' => csrf(), 'maxpos' => $maxpos, 'setName' => $cur['name']]) ?>;</script>
-<script src="<?= $B ?>/admin.js?v=4"></script>
+<script>window.G = <?= json_encode(['api' => "$B/api.php", 'cid' => $cid, 'set' => (int)$cur['id'], 'csrf' => csrf(), 'maxpos' => $maxpos, 'setName' => $cur['name'], 'sort' => $c['sort_mode'], 'find' => $find]) ?>;</script>
+<script>window.initPhotos ? initPhotos() : addEventListener('load', () => initPhotos());</script>
 <?php
     // ===== Design =====
     } elseif ($tab === 'design') {
@@ -347,7 +346,7 @@ if (isset($_GET['c'])) {
   <section class="preview"><div class="frame" id="frame"><iframe id="pv" src="<?= $B ?>/g.php?s=<?= e($c['slug']) ?>&embed=1" title="Gallery preview"></iframe></div>
     <div class="devices"><button type="button" class="on" data-w="desktop" title="Desktop"><?= icon('desktop') ?></button><button type="button" data-w="phone" title="Phone"><?= icon('phone') ?></button></div></section>
 </main>
-<script>
+<script>{
 const API = <?= json_encode("$B/api.php") ?>, CID = <?= $cid ?>, CSRF = <?= json_encode(csrf()) ?>;
 document.querySelectorAll('.opt').forEach(b => b.onclick = async () => {
   const fd = new FormData(); fd.append('csrf', CSRF); fd.append('cid', CID); fd.append('field', b.dataset.field); fd.append('value', b.dataset.value);
@@ -374,7 +373,7 @@ document.querySelectorAll('.devices button').forEach(b => b.onclick = () => {
   document.querySelectorAll('.devices button').forEach(o => o.classList.toggle('on', o === b));
   document.getElementById('frame').classList.toggle('phone', b.dataset.w === 'phone');
 });
-</script>
+}</script>
 <?php
     // ===== Settings =====
     } elseif ($tab === 'settings') {
@@ -463,13 +462,12 @@ document.querySelectorAll('.devices button').forEach(b => b.onclick = () => {
 </main>
 <?php } ?>
 </div>
-<script>
-document.addEventListener('click', ev => document.querySelectorAll('details.menu[open]').forEach(d => { if (!d.contains(ev.target)) d.open = false; }));
+<script>{
 document.getElementById('status').onchange = async ev => {
   const fd = new FormData(); fd.append('csrf', <?= json_encode(csrf()) ?>); fd.append('cid', <?= $cid ?>); fd.append('field', 'status'); fd.append('value', ev.target.value);
-  await fetch(<?= json_encode("$B/api.php?a=set") ?>, {method: 'POST', body: fd}); location.reload();
+  await fetch(<?= json_encode("$B/api.php?a=set") ?>, {method: 'POST', body: fd}); window.nav ? nav(location.href, false) : location.reload();
 };
-</script>
+}</script>
     <?php page_end(); exit;
 }
 
@@ -494,16 +492,16 @@ page_top('Collections'); ?>
     <button class="btn" type="button" onclick="document.getElementById('newfolder').showModal()">New Folder</button>
     <button class="btn primary" type="button" onclick="document.getElementById('newcol').showModal()">New Collection</button></div>
   <div class="chips">
-    <?= sel('status', ['' => 'Status', 'published' => 'Published', 'draft' => 'Draft'], $_GET['status'] ?? '', 'form="filters" class="chip" onchange="this.form.submit()"') ?>
-    <?= sel('tag', $tagOpts, $_GET['tag'] ?? '', 'form="filters" class="chip" onchange="this.form.submit()"') ?>
-    <?php if ($folders) echo sel('folder', $folderFilter, $_GET['folder'] ?? '', 'form="filters" class="chip" onchange="this.form.submit()"'); ?>
+    <?= sel('status', ['' => 'Status', 'published' => 'Published', 'draft' => 'Draft'], $_GET['status'] ?? '', 'form="filters" class="chip" onchange="this.form.requestSubmit()"') ?>
+    <?= sel('tag', $tagOpts, $_GET['tag'] ?? '', 'form="filters" class="chip" onchange="this.form.requestSubmit()"') ?>
+    <?php if ($folders) echo sel('folder', $folderFilter, $_GET['folder'] ?? '', 'form="filters" class="chip" onchange="this.form.requestSubmit()"'); ?>
     <?php if ($where) { ?><a class="link" href="<?= $B ?>/admin.php">Clear filters</a><?php } ?>
   </div>
   <?php if ($curFolder) { ?><div class="folderbar"><?= icon('folder') ?><span>Share this folder: <code><?= e("$site/?f={$curFolder['share_token']}") ?></code></span><span class="grow"></span>
     <form method="post" onsubmit="return confirm('Delete this folder? Its collections are kept.')"><?= hidden('delete_folder') ?><input type="hidden" name="fid" value="<?= $curFolder['id'] ?>"><button class="link danger">Delete folder</button></form></div><?php } ?>
 
   <?php if ($cols) { ?><table class="list"><thead><tr><th>Name</th><th>Status</th><th>Password</th><th>Date created</th></tr></thead><tbody>
-  <?php foreach ($cols as $c) { ?><tr onclick="location.href='<?= $B ?>/admin.php?c=<?= $c['id'] ?>'">
+  <?php foreach ($cols as $c) { ?><tr onclick="nav('<?= $B ?>/admin.php?c=<?= $c['id'] ?>')">
     <td><a class="colname" href="<?= $B ?>/admin.php?c=<?= $c['id'] ?>"><span class="sq"><?php if ($c['key_thumb']) { ?><img loading="lazy" src="<?= e(r2_url('GET', $c['key_thumb'])) ?>" alt=""><?php } ?></span>
       <span><strong><?= e($c['name']) ?></strong><small><?= (int)$c['n'] ?> items<?= $c['event_date'] ? ' &bull; ' . e(nice_date($c['event_date'])) : '' ?></small></span></a></td>
     <td><span class="pill <?= e($c['status']) ?>"><?= e($c['status']) ?></span></td>
