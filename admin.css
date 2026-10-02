@@ -198,3 +198,11 @@ select.statussel.published { background: var(--accent-soft); color: #23705f; }
   .cmain.design { display: block; } .pick { border-right: 0; padding: 20px 16px; } .preview { height: 70vh; padding: 16px; }
   .tiles { grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 10px; }
 }
+
+/* Settings on/off pills and activity */
+.sidelist li em { font-style: normal; font-size: 10px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; background: #eeeeec; color: #8a8d90; padding: 3px 8px; border-radius: 99px; }
+.sidelist li em.yes { background: var(--accent-soft); color: #23705f; }
+.list tr.still { cursor: default; } .list tr.still:hover { background: none; }
+.list td.wrap { max-width: 420px; }
+.favlist { margin-bottom: 40px; } .favlist h2 { margin: 0; } .favlist h2 small { font-weight: 400; margin-left: 8px; }
+.tiles.small { grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 10px; } .tiles.small .tile { cursor: default; }

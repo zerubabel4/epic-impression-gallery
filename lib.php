@@ -37,7 +37,7 @@ function slugify($s) {
 function redirect($to) { header('Location: ' . base() . '/' . $to); exit; }
 
 // Presigned URL for a private R2 object (AWS Signature V4, query string form).
-function r2_url($method, $key, $expires = 3600) {
+function r2_url($method, $key, $expires = 3600, $extra = []) {
     global $CFG;
     if (!empty($CFG['local_files'])) return base() . '/' . $CFG['local_files'] . '/' . $key; // local testing only
     $host = $CFG['r2_account'] . '.r2.cloudflarestorage.com';
@@ -50,7 +50,7 @@ function r2_url($method, $key, $expires = 3600) {
         'X-Amz-Date' => $time,
         'X-Amz-Expires' => $expires,
         'X-Amz-SignedHeaders' => 'host',
-    ];
+    ] + $extra;
     ksort($query);
     $qs = http_build_query($query, '', '&', PHP_QUERY_RFC3986);
     $canonical = "$method\n$path\n$qs\nhost:$host\n\nhost\nUNSIGNED-PAYLOAD";
@@ -68,7 +68,18 @@ function r2_delete($key) {
     curl_setopt_array($ch, [CURLOPT_CUSTOMREQUEST => 'DELETE', CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 20]);
     curl_exec($ch); curl_close($ch);
 }
-function delete_photo_files($p) { r2_delete($p['key_orig']); r2_delete($p['key_web']); r2_delete($p['key_thumb']); }
+function delete_photo_files($p) {
+    r2_delete($p['key_orig']); r2_delete($p['key_web']); r2_delete($p['key_thumb']);
+    foreach (['favorites', 'comments', 'downloads'] as $t) q("DELETE FROM $t WHERE photo_id=?", [$p['id']]);
+}
+
+// A visitor may see a collection if it is published, not expired, and they passed the password (or are the owner).
+function can_view($c) {
+    if (is_admin()) return true;
+    if ($c['status'] !== 'published' || ($c['expires_at'] && $c['expires_at'] < date('Y-m-d'))) return false;
+    return $c['password'] === '' || !empty($_SESSION['g'][$c['id']]);
+}
+function client_name($cid) { return is_admin() ? 'Owner' : ($_SESSION['client'][$cid] ?? ''); }
 
 // ---------- Design options shared by the admin pickers and the client gallery ----------
 const FONT_LINK = 'https://fonts.bunny.net/css?family=inter:400,500,600|cormorant-garamond:400,500|jost:300,400|montserrat:700,800&display=swap';
@@ -131,10 +142,17 @@ function migrate() {
               "UPDATE collections SET font='sans' WHERE font='mono'",
               "UPDATE collections SET grid_style='masonry' WHERE grid_style='square'",
               "UPDATE collections SET grid_size='medium' WHERE grid_size='small'"],
+        3 => ["CREATE TABLE IF NOT EXISTS favorites (id INT AUTO_INCREMENT PRIMARY KEY, collection_id INT NOT NULL, photo_id INT NOT NULL, client VARCHAR(80) NOT NULL, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, UNIQUE (photo_id, client))",
+              "CREATE TABLE IF NOT EXISTS comments (id INT AUTO_INCREMENT PRIMARY KEY, collection_id INT NOT NULL, photo_id INT NOT NULL, client VARCHAR(80) NOT NULL, body TEXT NOT NULL, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)",
+              "CREATE TABLE IF NOT EXISTS downloads (id INT AUTO_INCREMENT PRIMARY KEY, collection_id INT NOT NULL, photo_id INT NOT NULL, client VARCHAR(80) NOT NULL, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)",
+              "ALTER TABLE collections ADD allow_download TINYINT NOT NULL DEFAULT 1",
+              "ALTER TABLE collections ADD allow_favorite TINYINT NOT NULL DEFAULT 1"],
     ];
+    $sqlite = db()->getAttribute(PDO::ATTR_DRIVER_NAME) === 'sqlite'; // local testing only
     foreach ($steps as $n => $sqls) {
         if ($v >= $n) continue;
-        foreach ($sqls as $sql) { try { db()->exec($sql); } catch (Exception $ex) { /* already applied */ } }
+        foreach ($sqls as $sql) {
+            if ($sqlite) $sql = str_replace('INT AUTO_INCREMENT PRIMARY KEY', 'INTEGER PRIMARY KEY AUTOINCREMENT', $sql); try { db()->exec($sql); } catch (Exception $ex) { /* already applied */ } }
         q("UPDATE meta SET v=? WHERE k='schema'", [$n]);
     }
 }

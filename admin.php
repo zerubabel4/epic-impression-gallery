@@ -36,7 +36,7 @@ function page_top($title, $class = '') { global $B; ?>
 <!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="robots" content="noindex"><title><?= e($title) ?></title>
 <link rel="preconnect" href="https://fonts.bunny.net"><link rel="stylesheet" href="<?= e(FONT_LINK) ?>">
-<link rel="stylesheet" href="<?= $B ?>/admin.css?v=2"></head><body class="admin <?= e($class) ?>">
+<link rel="stylesheet" href="<?= $B ?>/admin.css?v=3"></head><body class="admin <?= e($class) ?>">
 <?php }
 function page_end() { echo '</body></html>'; }
 function sel($name, $opts, $cur, $attr = '') {
@@ -101,6 +101,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         case 'save_privacy':
             q('UPDATE collections SET password=?, hide_home=? WHERE id=?', [trim($_POST['password']), isset($_POST['show_home']) ? 0 : 1, $cid]);
             redirect("admin.php?c=$cid&tab=settings&sub=privacy&saved=1");
+        case 'save_download':
+            q('UPDATE collections SET allow_download=? WHERE id=?', [isset($_POST['on']) ? 1 : 0, $cid]);
+            redirect("admin.php?c=$cid&tab=settings&sub=download&saved=1");
+        case 'save_favorite':
+            q('UPDATE collections SET allow_favorite=? WHERE id=?', [isset($_POST['on']) ? 1 : 0, $cid]);
+            redirect("admin.php?c=$cid&tab=settings&sub=favorite&saved=1");
         case 'delete_collection':
             foreach (q('SELECT * FROM photos WHERE collection_id=?', [$cid]) as $p) delete_photo_files($p);
             q('DELETE FROM photos WHERE collection_id=?', [$cid]);
@@ -276,7 +282,7 @@ if (isset($_GET['c'])) {
     <h3>Grid Spacing</h3><div class="opts"><?= $opt('grid_gap', 'small', '<span class="gi g-4"><i></i><i></i><i></i><i></i></span>', 'Regular') . $opt('grid_gap', 'large', '<span class="gi g-4 wide"><i></i><i></i><i></i><i></i></span>', 'Large') ?></div>
   <?php } ?>
   </section>
-  <section class="preview"><div class="frame" id="frame"><iframe id="pv" src="<?= $B ?>/g.php?s=<?= e($c['slug']) ?>" title="Gallery preview"></iframe></div>
+  <section class="preview"><div class="frame" id="frame"><iframe id="pv" src="<?= $B ?>/g.php?s=<?= e($c['slug']) ?>&embed=1" title="Gallery preview"></iframe></div>
     <div class="devices"><button type="button" class="on" data-w="desktop" title="Desktop"><?= icon('desktop') ?></button><button type="button" data-w="phone" title="Phone"><?= icon('phone') ?></button></div></section>
 </main>
 <script>
@@ -296,13 +302,14 @@ document.querySelectorAll('.devices button').forEach(b => b.onclick = () => {
 <?php
     // ===== Settings =====
     } elseif ($tab === 'settings') {
-        $sub = $sub === 'privacy' ? 'privacy' : 'general'; ?>
+        $sub = in_array($sub, ['privacy', 'download', 'favorite']) ? $sub : 'general';
+        $pill = function ($on) { return '<em class="' . ($on ? 'yes' : '') . '">' . ($on ? 'On' : 'Off') . '</em>'; }; ?>
   <div class="sidehead"><span>Settings</span></div>
   <ul class="sidelist nav">
     <li class="<?= $sub === 'general' ? 'on' : '' ?>"><a href="<?= $url('settings') ?>"><?= icon('wrench') ?>General</a></li>
     <li class="<?= $sub === 'privacy' ? 'on' : '' ?>"><a href="<?= $url('settings', 'privacy') ?>"><?= icon('lock') ?>Privacy</a></li>
-    <li class="off"><span><?= icon('download') ?>Download</span><em>Soon</em></li>
-    <li class="off"><span><?= icon('heart') ?>Favorite</span><em>Soon</em></li>
+    <li class="<?= $sub === 'download' ? 'on' : '' ?>"><a href="<?= $url('settings', 'download') ?>"><?= icon('download') ?>Download</a><?= $pill($c['allow_download']) ?></li>
+    <li class="<?= $sub === 'favorite' ? 'on' : '' ?>"><a href="<?= $url('settings', 'favorite') ?>"><?= icon('heart') ?>Favorite</a><?= $pill($c['allow_favorite']) ?></li>
   </ul>
 </aside>
 <main class="cmain form">
@@ -321,6 +328,16 @@ document.querySelectorAll('.devices button').forEach(b => b.onclick = () => {
   </form>
   <form method="post" class="dangerzone" onsubmit="return confirm('Delete this collection and all its photos? This cannot be undone.')"><?= hidden('delete_collection', $cid) ?>
     <b>Delete Collection</b><small>Removes the collection and every photo in it, permanently.</small><button class="btn danger">Delete collection</button></form>
+  <?php } elseif ($sub === 'download') { ?>
+  <h1>Download Settings</h1>
+  <form method="post" class="fields"><?= hidden('save_download', $cid) ?>
+    <label class="toggle"><input type="checkbox" name="on" <?= $c['allow_download'] ? 'checked' : '' ?>><i></i><span><b>Photo Download</b><small>Let clients download single photos in original resolution from the full-screen view.</small></span></label>
+    <button class="btn primary">Save</button></form>
+  <?php } elseif ($sub === 'favorite') { ?>
+  <h1>Favorite Settings</h1>
+  <form method="post" class="fields"><?= hidden('save_favorite', $cid) ?>
+    <label class="toggle"><input type="checkbox" name="on" <?= $c['allow_favorite'] ? 'checked' : '' ?>><i></i><span><b>Favorite Photos</b><small>Let clients mark favorites. They enter their name the first time, so you can see whose selection it is.</small></span></label>
+    <button class="btn primary">Save</button></form>
   <?php } else { ?>
   <h1>Privacy Settings</h1>
   <form method="post" class="fields"><?= hidden('save_privacy', $cid) ?>
@@ -332,13 +349,42 @@ document.querySelectorAll('.devices button').forEach(b => b.onclick = () => {
 </main>
 <?php
     // ===== Activity =====
-    } else { ?>
+    } else {
+        $sub = in_array($sub, ['favorites', 'comments']) ? $sub : 'downloads'; ?>
   <div class="sidehead"><span>Activities</span></div>
-  <ul class="sidelist nav"><li class="on"><a href="<?= $url('activity') ?>"><?= icon('download') ?>Download Activity</a></li>
-  <li class="off"><span><?= icon('heart') ?>Favorite Activity</span><em>Soon</em></li></ul>
+  <ul class="sidelist nav">
+    <li class="<?= $sub === 'downloads' ? 'on' : '' ?>"><a href="<?= $url('activity') ?>"><?= icon('download') ?>Download Activity</a></li>
+    <li class="<?= $sub === 'favorites' ? 'on' : '' ?>"><a href="<?= $url('activity', 'favorites') ?>"><?= icon('heart') ?>Favorite Activity</a></li>
+    <li class="<?= $sub === 'comments' ? 'on' : '' ?>"><a href="<?= $url('activity', 'comments') ?>"><?= icon('pencil') ?>Comments</a></li></ul>
 </aside>
-<main class="cmain form"><h1>Download Activity</h1>
-  <div class="emptystate"><?= icon('download') ?><p>No activity yet.</p><p class="muted">Client downloads will be listed here once downloads are added in the next phase.</p></div></main>
+<main class="cmain">
+  <?php if ($sub === 'downloads') {
+        $rows = q('SELECT d.client, d.created_at, p.filename, p.key_thumb FROM downloads d JOIN photos p ON p.id=d.photo_id WHERE d.collection_id=? ORDER BY d.id DESC LIMIT 500', [$cid])->fetchAll(); ?>
+  <div class="mainhead"><h1>Download Activity</h1></div>
+  <?php if ($rows) { ?><table class="list"><thead><tr><th>Photo</th><th>Client</th><th>Downloaded</th></tr></thead><tbody>
+    <?php foreach ($rows as $r) { ?><tr class="still"><td><span class="colname"><span class="sq"><img loading="lazy" src="<?= e(r2_url('GET', $r['key_thumb'])) ?>" alt=""></span><span><?= e($r['filename']) ?></span></span></td>
+    <td><?= e($r['client']) ?></td><td><?= e(date('M j, Y H:i', strtotime($r['created_at']))) ?></td></tr><?php } ?></tbody></table>
+  <?php } else { ?><div class="emptystate"><?= icon('download') ?><p>No downloads yet.</p><p class="muted">Each photo a client downloads is listed here.</p></div><?php } ?>
+
+  <?php } elseif ($sub === 'favorites') {
+        $rows = q('SELECT f.client, p.filename, p.key_thumb FROM favorites f JOIN photos p ON p.id=f.photo_id WHERE f.collection_id=? ORDER BY f.client, p.filename', [$cid])->fetchAll();
+        $by = []; foreach ($rows as $r) $by[$r['client']][] = $r; ?>
+  <div class="mainhead"><h1>Favorite Activity</h1></div>
+  <?php foreach ($by as $client => $list) { $names = implode(', ', array_column($list, 'filename')); ?>
+  <section class="favlist"><div class="mainhead"><h2><?= e($client) ?> <small><?= count($list) ?> photos</small></h2><span class="grow"></span>
+    <button type="button" class="btn" onclick="navigator.clipboard.writeText(this.dataset.names);this.textContent='Copied'" data-names="<?= e($names) ?>">Copy filenames</button></div>
+    <div class="tiles small"><?php foreach ($list as $r) { ?><span class="tile" title="<?= e($r['filename']) ?>"><img loading="lazy" src="<?= e(r2_url('GET', $r['key_thumb'])) ?>" alt=""></span><?php } ?></div></section>
+  <?php } if (!$by) { ?><div class="emptystate"><?= icon('heart') ?><p>No favorites yet.</p><p class="muted">When clients mark favorites, their selections appear here, grouped by name.</p></div><?php } ?>
+
+  <?php } else {
+        $rows = q('SELECT m.client, m.body, m.created_at, p.filename, p.key_thumb FROM comments m JOIN photos p ON p.id=m.photo_id WHERE m.collection_id=? ORDER BY m.id DESC LIMIT 500', [$cid])->fetchAll(); ?>
+  <div class="mainhead"><h1>Comments</h1></div>
+  <?php if ($rows) { ?><table class="list"><thead><tr><th>Photo</th><th>Client</th><th>Comment</th><th>Date</th></tr></thead><tbody>
+    <?php foreach ($rows as $r) { ?><tr class="still"><td><span class="colname"><span class="sq"><img loading="lazy" src="<?= e(r2_url('GET', $r['key_thumb'])) ?>" alt=""></span><span><?= e($r['filename']) ?></span></span></td>
+    <td><?= e($r['client']) ?></td><td class="wrap"><?= nl2br(e($r['body'])) ?></td><td><?= e(date('M j, Y H:i', strtotime($r['created_at']))) ?></td></tr><?php } ?></tbody></table>
+  <?php } else { ?><div class="emptystate"><?= icon('pencil') ?><p>No comments yet.</p><p class="muted">Comments clients leave on photos are private: only you and that client see them.</p></div><?php } ?>
+  <?php } ?>
+</main>
 <?php } ?>
 </div>
 <script>

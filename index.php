@@ -16,8 +16,9 @@ $cols = q("SELECT c.*, p.key_web FROM collections c LEFT JOIN photos p ON p.id=c
 ?><!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title><?= e($title) ?></title>
 <link rel="preconnect" href="https://fonts.bunny.net"><link rel="stylesheet" href="<?= e(FONT_LINK) ?>">
-<link rel="stylesheet" href="<?= $B ?>/style.css?v=2"></head>
+<link rel="stylesheet" href="<?= $B ?>/style.css?v=3"></head>
 <body class="gallery home" style="<?= e(palette_vars('light') . ';' . type_vars('sans')) ?>">
+<?php if (is_admin()) { ?><p class="ownerbar">Viewing your homepage as <b>Owner</b>. <a href="<?= $B ?>/admin.php">Open dashboard to add or edit collections</a></p><?php } ?>
 <header class="hometop"><h1><?= e($title) ?></h1></header>
 <main class="homegrid"><?php foreach ($cols as $c) { ?>
 <a href="<?= $B ?>/g/<?= e($c['slug']) ?>"><div class="thumb"><?php if ($c['key_web'] && $c['password'] === '') { ?><img loading="lazy" src="<?= e(r2_url('GET', $c['key_web'])) ?>" alt=""><?php } ?></div>
@@ -25,4 +26,5 @@ $cols = q("SELECT c.*, p.key_web FROM collections c LEFT JOIN photos p ON p.id=c
 <?php if ($c['password'] !== '') echo '<span>Private</span>'; ?></a>
 <?php } ?></main>
 <?php if (!$cols) echo '<p class="empty">No galleries to show yet.</p>'; ?>
+<footer class="gfoot"><a href="<?= $B ?>/admin.php"><?= is_admin() ? 'Dashboard' : 'Owner login' ?></a></footer>
 </body></html>
