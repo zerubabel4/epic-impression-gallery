@@ -94,7 +94,7 @@ const FONT_LINK = 'https://fonts.bunny.net/css?family=inter:400,500,600|cormoran
 
 function covers() {
     return ['center' => 'Center', 'left' => 'Left', 'novel' => 'Novel', 'vintage' => 'Vintage', 'frame' => 'Frame',
-            'stripe' => 'Stripe', 'divider' => 'Divider', 'journal' => 'Journal', 'none' => 'No cover'];
+            'stripe' => 'Stripe', 'divider' => 'Divider', 'journal' => 'Journal'];
 }
 // name => [background, soft background, accent, text]
 function palettes() {
@@ -158,6 +158,7 @@ function migrate() {
         4 => ["ALTER TABLE collections ADD focal_x INT NOT NULL DEFAULT 50",
               "ALTER TABLE collections ADD focal_y INT NOT NULL DEFAULT 50",
               "CREATE TABLE IF NOT EXISTS presets (id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(120) NOT NULL, data TEXT NOT NULL)"],
+        5 => ["UPDATE collections SET cover_style='center' WHERE cover_style='none'"],
     ];
     $sqlite = db()->getAttribute(PDO::ATTR_DRIVER_NAME) === 'sqlite'; // local testing only
     foreach ($steps as $n => $sqls) {
