@@ -1,0 +1,6 @@
+Options -Indexes
+RewriteEngine On
+RewriteRule ^g/([a-z0-9-]+)/?$ g.php?s=$1 [L,QSA]
+<FilesMatch "^(config|lib)\.php$">
+Require all denied
+</FilesMatch>
