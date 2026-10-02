@@ -8,13 +8,13 @@ if (!$c || (!is_admin() && ($c['status'] !== 'published' || $expired))) {
     http_response_code(404);
     exit('<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Not available</title><p style="font-family:sans-serif;text-align:center;margin-top:20vh">This gallery is not available.</p>');
 }
-$fonts = ['serif' => 'Georgia, "Times New Roman", serif', 'sans' => '"Helvetica Neue", Helvetica, Arial, sans-serif',
-          'classic' => '"Palatino Linotype", Palatino, "Book Antiqua", serif', 'mono' => '"Courier New", Courier, monospace'];
-$vars = "--bg:{$c['color_bg']};--text:{$c['color_text']};--accent:{$c['color_accent']};--font:" . ($fonts[$c['font']] ?? $fonts['serif']);
+$vars = palette_vars($c['palette'] ?? 'light') . ';' . type_vars($c['font']);
 
 function top($c, $vars) { global $B; ?>
 <!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="robots" content="noindex"><title><?= e($c['name']) ?></title><link rel="stylesheet" href="<?= $B ?>/style.css"></head>
+<meta name="robots" content="noindex"><title><?= e($c['name']) ?></title>
+<link rel="preconnect" href="https://fonts.bunny.net"><link rel="stylesheet" href="<?= e(FONT_LINK) ?>">
+<link rel="stylesheet" href="<?= $B ?>/style.css?v=2"></head>
 <body class="gallery" style="<?= e($vars) ?>">
 <?php }
 
@@ -40,29 +40,29 @@ if ($c['password'] !== '' && !is_admin() && empty($_SESSION['g'][$c['id']])) {
 $sets = q('SELECT s.* FROM sets s WHERE collection_id=? AND EXISTS (SELECT 1 FROM photos p WHERE p.set_id=s.id) ORDER BY position, id', [$c['id']])->fetchAll();
 $cur = $sets[0] ?? null;
 foreach ($sets as $s) if ($s['id'] == (int)($_GET['set'] ?? 0)) $cur = $s;
-$order = ['manual' => 'position, id', 'name_asc' => 'filename', 'name_desc' => 'filename DESC', 'date_asc' => 'taken_at, id', 'date_desc' => 'taken_at DESC, id DESC'][$c['sort_mode']] ?? 'position, id';
-$photos = $cur ? q("SELECT * FROM photos WHERE set_id=? ORDER BY $order", [$cur['id']])->fetchAll() : [];
+$photos = $cur ? q('SELECT * FROM photos WHERE set_id=? ORDER BY ' . photo_order($c['sort_mode']), [$cur['id']])->fetchAll() : [];
 $cover = $c['cover_photo_id'] ? q('SELECT * FROM photos WHERE id=?', [$c['cover_photo_id']])->fetch() : null;
-$rowH = ['small' => 160, 'medium' => 240, 'large' => 340][$c['grid_size']] ?? 240;
-$date = $c['event_date'] ? date('F j, Y', strtotime($c['event_date'])) : '';
+$rowH = $c['grid_size'] === 'large' ? 380 : 260;
+$date = $c['event_date'] ? date('F jS, Y', strtotime($c['event_date'])) : '';
+$style = isset(covers()[$c['cover_style']]) ? $c['cover_style'] : 'center';
 top($c, $vars);
 
 if (is_admin() && ($c['status'] !== 'published' || $expired)) echo '<p class="preview">Preview only: clients cannot see this gallery (' . ($expired ? 'expired' : 'draft') . ').</p>';
 
-if ($cover && $c['cover_style'] !== 'none') { ?>
-<header class="cover <?= e($c['cover_style']) ?>"><img src="<?= e(r2_url('GET', $cover['key_web'])) ?>" alt="">
-<div class="title"><h1><?= e($c['name']) ?></h1><?php if ($date) echo '<p>' . e($date) . '</p>'; ?><a href="#photos">View gallery</a></div></header>
-<?php } else { ?>
-<header class="plain"><h1><?= e($c['name']) ?></h1><?php if ($date) echo '<p>' . e($date) . '</p>'; ?></header>
+if ($cover && $style !== 'none') { ?>
+<header class="cover c-<?= e($style) ?>"><div class="cimg"><img src="<?= e(r2_url('GET', $cover['key_web'])) ?>" alt=""></div>
+<div class="ctitle"><h1><?= e($c['name']) ?></h1><?php if ($date) echo '<p>' . e($date) . '</p>'; ?><a href="#photos">View gallery</a></div>
+<p class="studio"><?= e($CFG['site_name']) ?></p></header>
 <?php } ?>
 
-<main id="photos">
+<div class="gbar" id="photos"><div class="gname"><strong><?= e($c['name']) ?></strong><span><?= e($CFG['site_name']) ?></span></div>
 <?php if (count($sets) > 1) { ?><nav class="sets"><?php foreach ($sets as $s) { ?>
-<a class="<?= $s['id'] == $cur['id'] ? 'on' : '' ?>" href="<?= $B ?>/g/<?= e($c['slug']) ?>?set=<?= $s['id'] ?>#photos"><?= e($s['name']) ?></a><?php } ?></nav><?php } ?>
+<a class="<?= $s['id'] == $cur['id'] ? 'on' : '' ?>" href="<?= $B ?>/g.php?s=<?= e($c['slug']) ?>&set=<?= $s['id'] ?>#photos"><?= e($s['name']) ?></a><?php } ?></nav><?php } ?></div>
 
+<main>
 <div class="grid <?= e($c['grid_style']) ?> size-<?= e($c['grid_size']) ?> gap-<?= e($c['grid_gap']) ?>">
 <?php foreach ($photos as $i => $p) { $ar = $p['height'] ? $p['width'] / $p['height'] : 1.5; ?>
-<a class="ph" href="<?= e(r2_url('GET', $p['key_web'])) ?>" data-i="<?= $i ?>" data-name="<?= e($p['filename']) ?>"
+<a class="ph" href="<?= e(r2_url('GET', $p['key_web'])) ?>" data-name="<?= e($p['filename']) ?>"
    style="aspect-ratio:<?= round($ar, 4) ?>;flex:<?= round($ar, 4) ?> 1 <?= round($ar * $rowH) ?>px">
 <img loading="lazy" src="<?= e(r2_url('GET', $p['key_thumb'])) ?>" alt="<?= e($p['filename']) ?>">
 <?php if ($c['show_filenames']) echo '<span>' . e($p['filename']) . '</span>'; ?></a>
@@ -70,6 +70,7 @@ if ($cover && $c['cover_style'] !== 'none') { ?>
 </div>
 <?php if (!$photos) echo '<p class="empty">No photos here yet.</p>'; ?>
 </main>
+<footer class="gfoot"><?= e($CFG['site_name']) ?></footer>
 
 <div id="lb" hidden><button id="lbx" aria-label="Close">&times;</button><button id="lbp" aria-label="Previous">&#8249;</button>
 <figure><img id="lbi" alt=""><figcaption id="lbc"></figcaption></figure><button id="lbn" aria-label="Next">&#8250;</button></div>

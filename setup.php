@@ -53,7 +53,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 function v($k, $d = '') { global $f; return htmlspecialchars($f[$k] ?? $d, ENT_QUOTES); }
 ?><!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Setup</title><link rel="stylesheet" href="style.css"></head><body class="admin"><main class="narrow">
+<title>Setup</title><link rel="stylesheet" href="admin.css"></head><body class="admin"><main class="narrow">
 <h1>Gallery setup</h1>
 <?php if ($err) echo '<p class="err">' . htmlspecialchars($err) . '</p>'; ?>
 <form method="post" class="stack">
