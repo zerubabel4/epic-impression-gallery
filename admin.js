@@ -58,6 +58,23 @@ function shrink(src, max) {
   return c;
 }
 const toJpeg = c => new Promise(res => c.toBlob(res, 'image/jpeg', 0.85));
+// Resizing runs in two background workers; the main-thread version is only a fallback for old browsers.
+const SCRIPT_BASE = document.currentScript.src.replace(/admin\.js.*$/, '');
+const resizers = [], waiting = new Map(); let resizeSeq = 0;
+function makeCopies(file) {
+  if (!window.OffscreenCanvas || !window.Worker) return makeCopiesHere(file);
+  if (!resizers.length) for (let i = 0; i < 2; i++) {
+    const w = new Worker(SCRIPT_BASE + 'upload-worker.js?v=6');
+    w.onmessage = ev => { const p = waiting.get(ev.data.id); waiting.delete(ev.data.id); ev.data.error ? p.reject(new Error('Could not read this image')) : p.resolve(ev.data); };
+    resizers.push(w);
+  }
+  return new Promise((resolve, reject) => { const id = ++resizeSeq; waiting.set(id, {resolve, reject}); resizers[id % resizers.length].postMessage({id, file}); });
+}
+async function makeCopiesHere(file) {
+  const bmp = await createImageBitmap(file, {imageOrientation: 'from-image'});
+  const width = bmp.width, height = bmp.height, webCanvas = shrink(bmp, 2048); bmp.close();
+  return {web: await toJpeg(webCanvas), thumb: await toJpeg(shrink(webCanvas, 600)), width, height};
+}
 function putOnce(url, body, job, onProgress) {
   return new Promise((resolve, reject) => {
     const x = new XMLHttpRequest(); job.xhrs.push(x);
@@ -105,7 +122,7 @@ function addUploads(files, ctx) {
   if (!UP.jobs.some(j => j.state === 'queued' || j.state === 'uploading')) { UP.jobs = []; UP.start = performance.now(); } // new batch
   UP.nextPos[ctx.set] = Math.max(UP.nextPos[ctx.set] || 0, ctx.maxpos);
   for (const file of files) UP.jobs.push({file, ctx: {...ctx}, pos: ++UP.nextPos[ctx.set], state: 'queued', sent: 0, xhrs: [], err: ''});
-  UP.tab = 'uploading'; UP.open = true; UP.closed = false;
+  UP.tab = 'uploading'; UP.open = true; UP.closed = false; UP.notified = false;
   pump(); drawUp();
 }
 function pump() {
@@ -123,9 +140,7 @@ async function runJob(job) {
     // The original starts uploading at once; the smaller copies are made while it travels.
     const orig = put(s.urls.orig, f, job, n => { job.sent = n; drawUp(); });
     orig.catch(() => {});
-    const bmp = await createImageBitmap(f, {imageOrientation: 'from-image'});
-    const dims = {width: bmp.width, height: bmp.height}, webCanvas = shrink(bmp, 2048); bmp.close();
-    const web = await toJpeg(webCanvas), thumb = await toJpeg(shrink(webCanvas, 600));
+    const {web, thumb, ...dims} = await makeCopies(f);
     await Promise.all([orig, put(s.urls.web, web, job), put(s.urls.thumb, thumb, job)]);
     const r = await upApi(ctx, 'save', {set_id: ctx.set, filename: f.name, key_orig: s.keys.orig, key_web: s.keys.web, key_thumb: s.keys.thumb,
       width: dims.width, height: dims.height, size: f.size, taken_at: f.lastModified, taken: await takenDate(f), position: job.pos});
@@ -137,6 +152,14 @@ async function runJob(job) {
   }
   job.xhrs = [];
   pump(); drawUp();
+  if (!UP.notified && !UP.jobs.some(j => j.state === 'queued' || j.state === 'uploading')) batchFinished();
+}
+// When the whole batch has settled, ask the server to send the notification email (if switched on in Settings).
+function batchFinished() {
+  UP.notified = true;
+  const per = new Map();
+  UP.jobs.forEach(j => { const e = per.get(j.ctx.cid) || {ctx: j.ctx, done: 0, failed: 0}; j.state === 'done' ? e.done++ : e.failed++; per.set(j.ctx.cid, e); });
+  per.forEach(e => { if (e.done) upApi(e.ctx, 'notify', {done: e.done, failed: e.failed}).catch(() => {}); });
 }
 // A finished photo appears in the grid straight away, if that set is on screen.
 function showUploaded(job, id, thumbUrl) {
@@ -172,7 +195,7 @@ function renderUp() {
       const act = b.dataset.up, busy = UP.jobs.some(j => j.state === 'queued' || j.state === 'uploading');
       if (act === 'toggle') UP.open = !UP.open;
       if (act === 'tab') UP.tab = b.dataset.tab;
-      if (act === 'retry') { UP.jobs.forEach(j => { if (j.state === 'failed') { j.state = 'queued'; j.stopped = false; } }); UP.tab = 'uploading'; pump(); }
+      if (act === 'retry') { UP.jobs.forEach(j => { if (j.state === 'failed') { j.state = 'queued'; j.stopped = false; } }); UP.tab = 'uploading'; UP.notified = false; pump(); }
       if (act === 'close') { if (!busy) UP.closed = true; else if (confirm('Stop the upload? Photos that already finished are kept.')) stopUploads(); }
       drawUp();
     });

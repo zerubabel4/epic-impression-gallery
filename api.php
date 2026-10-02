@@ -61,6 +61,16 @@ switch ($_GET['a'] ?? '') {
             q('UPDATE collections SET cover_photo_id=? WHERE id=?', [$ids[0], $cid]);
         break;
 
+    case 'notify': // an upload batch finished in the browser
+        $out['sent'] = false;
+        if (meta_get('notify_uploads') === '1') {
+            $done = (int)$_POST['done']; $failed = (int)$_POST['failed'];
+            $link = (empty($_SERVER['HTTPS']) ? 'http' : 'https') . '://' . $_SERVER['HTTP_HOST'] . base() . '/admin.php?c=' . $cid;
+            $out['sent'] = send_mail("Upload finished: {$col['name']}",
+                "Your upload to \"{$col['name']}\" has finished.\n\n$done photo(s) uploaded" . ($failed ? ", $failed not uploaded" : '') . ".\n\nOpen the collection: $link\n");
+        }
+        break;
+
     case 'focal': // where the cover photo is centred, in percent
         q('UPDATE collections SET focal_x=?, focal_y=? WHERE id=?', [max(0, min(100, (int)$_POST['x'])), max(0, min(100, (int)$_POST['y'])), $cid]);
         break;

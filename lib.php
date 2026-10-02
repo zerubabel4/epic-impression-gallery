@@ -89,6 +89,26 @@ function can_view($c) {
 }
 function client_name($cid) { return is_admin() ? 'Owner' : ($_SESSION['client'][$cid] ?? ''); }
 
+// Small key/value settings (stored in the meta table).
+function meta_get($k, $default = '') {
+    $v = q('SELECT v FROM meta WHERE k=?', [$k])->fetchColumn();
+    return $v === false ? $default : $v;
+}
+function meta_set($k, $v) {
+    if (q('SELECT k FROM meta WHERE k=?', [$k])->fetch()) q('UPDATE meta SET v=? WHERE k=?', [$v, $k]);
+    else q('INSERT INTO meta (k, v) VALUES (?,?)', [$k, $v]);
+}
+// Plain-text email to the photographer's notification address, sent through the hosting's own mail service.
+function send_mail($subject, $body) {
+    global $CFG;
+    $to = meta_get('notify_email');
+    if (!filter_var($to, FILTER_VALIDATE_EMAIL)) return false;
+    $host = preg_replace('/^www\.|:\d+$/', '', strtolower($_SERVER['HTTP_HOST'] ?? 'localhost'));
+    $name = preg_replace('/[^A-Za-z0-9 ._-]/', '', $CFG['site_name']);
+    $headers = "From: $name <noreply@$host>\r\nContent-Type: text/plain; charset=UTF-8";
+    return @mail($to, '=?UTF-8?B?' . base64_encode($subject) . '?=', $body, $headers);
+}
+
 // ---------- Design options shared by the admin pickers and the client gallery ----------
 const FONT_LINK = 'https://fonts.bunny.net/css?family=inter:400,500,600|cormorant-garamond:400,500|jost:300,400|montserrat:700,800&display=swap';
 

@@ -235,3 +235,5 @@ dialog.wide { width: min(760px, calc(100vw - 32px)); }
 .focal img { max-width: 100%; max-height: 60vh; width: auto; }
 .focal i { position: absolute; width: 26px; height: 26px; margin: -13px 0 0 -13px; border-radius: 50%; border: 3px solid #fff; background: rgba(47,143,123,.85); box-shadow: 0 0 0 1px rgba(0,0,0,.4); pointer-events: none; }
 select.plain { max-width: 230px; }
+.stack label.toggle { display: grid; grid-template-columns: auto 1fr; font-size: 15px; color: var(--ink); }
+.stack .toggle b { font-weight: 600; }

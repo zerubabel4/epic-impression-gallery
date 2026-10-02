@@ -43,7 +43,7 @@ function page_top($title, $class = '') { global $B; ?>
 <link rel="preconnect" href="https://fonts.bunny.net"><link rel="stylesheet" href="<?= e(FONT_LINK) ?>">
 <link rel="stylesheet" href="<?= $B ?>/admin.css?v=5"></head><body class="admin <?= e($class) ?>"><div id="app">
 <?php }
-function page_end() { global $B; echo '</div><script src="' . $B . '/admin.js?v=5"></script></body></html>'; }
+function page_end() { global $B; echo '</div><script src="' . $B . '/admin.js?v=6"></script></body></html>'; }
 function sel($name, $opts, $cur, $attr = '') {
     $h = "<select name=\"$name\" $attr>";
     foreach ($opts as $v => $label) $h .= '<option value="' . e($v) . '"' . ((string)$v === (string)$cur ? ' selected' : '') . '>' . e($label) . '</option>';
@@ -169,6 +169,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 q('DELETE FROM sets WHERE id=? AND collection_id=?', [(int)$_POST['sid'], $cid]);
             }
             redirect("admin.php?c=$cid");
+        case 'save_notify':
+            $mail = trim($_POST['email']);
+            if ($mail !== '' && !filter_var($mail, FILTER_VALIDATE_EMAIL)) { $msg = 'That email address does not look right.'; break; }
+            meta_set('notify_email', $mail); meta_set('notify_uploads', isset($_POST['uploads']) ? '1' : '0');
+            $msg = 'Notification settings saved.';
+            if (isset($_POST['test'])) $msg = send_mail('Test email from your gallery', "This is a test. Email notifications from your gallery are working.\n")
+                ? "Test email sent to $mail. If it does not arrive within a few minutes, check the spam folder."
+                : 'The test email could not be sent. Check the address, or the hosting mail service.';
+            break;
         case 'change_password':
             if (!password_verify($_POST['current'], $CFG['admin_hash'])) $msg = 'Current password is wrong.';
             elseif (strlen($_POST['new']) < 10) $msg = 'New password needs at least 10 characters.';
@@ -201,6 +210,11 @@ if (isset($_GET['account'])) {
     <div class="shell"><?php sidebar('account'); ?><main class="content"><h1>Settings</h1>
     <?php if ($msg) echo '<p class="note">' . e($msg) . '</p>'; ?>
     <section class="panel"><h2>Storage</h2><p><?= (int)$usage['n'] ?> photos, <?= number_format($usage['b'] / 1073741824, 2) ?> GB of originals stored.</p></section>
+    <section class="panel"><h2>Email notifications</h2>
+    <form method="post" class="stack"><?= hidden('save_notify') ?>
+    <label>Send notifications to <input type="email" name="email" value="<?= e(meta_get('notify_email')) ?>" placeholder="you@example.com"></label>
+    <label class="toggle"><input type="checkbox" name="uploads" <?= meta_get('notify_uploads') === '1' ? 'checked' : '' ?>><i></i><span><b>Upload finished</b><small>Email me when a batch of photos has finished uploading.</small></span></label>
+    <div class="row"><button class="btn primary">Save</button><button class="btn" name="test" value="1">Save and send test email</button></div></form></section>
     <section class="panel"><h2>Change password</h2>
     <form method="post" class="stack"><?= hidden('change_password') ?>
     <label>Current password <input type="password" name="current"></label>
